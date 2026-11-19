@@ -6,8 +6,8 @@ from gigachat import GigaChat
 from gigachat.models import Chat, Messages, MessagesRole
 
 # Подхватываем токен под любым именем, которое использует хостинг
-TG_TOKEN = os.environ.get("9078400838:AAEkskk3gv2Usllfl3w567pulYqQ11BRDGY") or os.environ.get("BOT_TOKEN")
-GIGA_KEY = os.environ.get("MDFhMWY1MTAtN2I4My03NjU0LTgwZTctM2U1OGU0ZTE1YWI5OjNjNDJkNWJjLTBmZTAtNDg5Zi1iYmI0LTgxMjA0NThmZDkwMw==")
+TG_TOKEN = os.environ.get("цу") or os.environ.get("BOT_TOKEN")
+GIGA_KEY = os.environ.get("цу")
 
 print(f"Старт бота... Токен найден: {bool(TG_TOKEN)}, Ключ GigaChat найден: {bool(GIGA_KEY)}", flush=True)
 
