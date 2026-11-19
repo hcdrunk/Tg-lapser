@@ -9,7 +9,7 @@ from gigachat.models import Chat, Messages, MessagesRole
 TG_TOKEN = os.environ.get("TELEGRAM_TOKEN") or os.environ.get("BOT_TOKEN")
 GIGA_KEY = os.environ.get("GIGACHAT_KEY")
 
-print(f"Старт бота... Токен найден: {bool(TG_TOKEN)}, Ключ GigaChat найден: {bool(GIGA_KEY)}", flush=True)
+print(f"Старт бота... Токен: {bool(TG_TOKEN)}, Ключ GigaChat: {bool(GIGA_KEY)}", flush=True)
 
 bot = telebot.TeleBot(TG_TOKEN)
 
@@ -34,8 +34,10 @@ RANDOM_CHANCE = 0.05  # 5% (примерно каждое 20-е сообщени
 SYSTEM_PROMPT = (
     "Ты — Безумный Таймлапсер, опытный и циничный участник телеграм-чата охотников за северными сияниями (Питер, Ленобласть, Волоярви, Порьюс). "
     "Ты сам постоянно снимаешь таймлапсы, мерзнешь в полях и шаришь за солнечный ветер, Bz, плотность и засветку. "
-    "Твоя задача: коротко (1-2 предложения), смешно и саркастично подкалывать участников чата. "
-    "Пиши как обычный живой чувак из интернета: с постиронией, без восклицательных знаков в конце каждой фразы, без штампов типа 'братишка', 'супер-дупер' и без душных советов.\n\n"
+    "Твой стиль: постироничный, саркастичный, слегка циничный, но свой в доску кореш. Ты любишь мягко подкалывать участников чата за их нытье, "
+    "ожидание чуда при плюсовом Bz, поездки в глухие тучи или глупые вопросы. Можешь слегка коверкать слова, использовать сленг охотников и постиронию. "
+    "Не душни, не читай лекции и не пиши длинные простыни — отвечай коротко (1-2 предложения), как в живом чате. "
+    "Пиши как обычный живой чувак из интернета: без восклицательных знаков в конце каждой фразы, без штампов типа 'братишка', 'супер-дупер' и без душных советов.\n\n"
     "Примеры твоего стиля общения:\n"
     "- Юзер: 'посияет сегодня интересно?'\n"
     "  Ты: 'Посияет, конечно. Особенно красиво будут сиять фонари на Мурманке сквозь плотную облачность.'\n"
@@ -73,22 +75,24 @@ def get_bot_username():
     if not BOT_USERNAME:
         me = bot.get_me()
         BOT_USERNAME = me.username.lower()
-        print(f"Бот успешно авторизован в Telegram как @{BOT_USERNAME}", flush=True)
+        print(f"Авторизован как @{BOT_USERNAME}", flush=True)
     return BOT_USERNAME
 
 def pick_smartest_model(giga):
     global BEST_MODEL
     if BEST_MODEL:
         return BEST_MODEL
-    models = [m.id_ for m in giga.get_models().data]
-    print(f"Доступные модели на аккаунте: {models}", flush=True)
-    # Ищем самую мощную из реально доступных на аккаунте: Ultra -> Max -> Pro
+    raw_models = giga.get_models().data
+    models = []
+    for item in raw_models:
+        m_id = getattr(item, 'id_', None) or getattr(item, 'id', None) or str(item)
+        models.append(m_id)
     for keyword in ["Ultra", "Max", "Pro"]:
         for m in models:
             if keyword.lower() in m.lower() and "preview" not in m.lower():
                 BEST_MODEL = m
                 return BEST_MODEL
-    BEST_MODEL = models
+    BEST_MODEL = models[0]
     return BEST_MODEL
 
 @bot.message_handler(func=lambda message: True)
@@ -148,7 +152,7 @@ def handle_message(message):
     try:
         with GigaChat(credentials=GIGA_KEY, verify_ssl_certs=False) as giga:
             model_name = pick_smartest_model(giga)
-            print(f"Отправляю запрос в {model_name}...", flush=True)
+            print(f"Запрос в {model_name}...", flush=True)
 
             payload = Chat(
                 model=model_name,
@@ -160,7 +164,7 @@ def handle_message(message):
                 max_tokens=140
             )
             response = giga.chat(payload)
-            reply = response.choices.message.content.strip()
+            reply = response.choices[0].message.content.strip()
             print(f"Ответ ({model_name}): {reply}", flush=True)
 
             censorship_phrases = [
@@ -171,7 +175,7 @@ def handle_message(message):
                 "как искусственный интеллект"
             ]
             if any(phrase in reply.lower() for phrase in censorship_phrases):
-                print("Сработала цензура Сбера — сообщение отброшено.", flush=True)
+                print("Сработала цензура — пропущено.", flush=True)
                 return
 
             if "ПРОПУСК" in reply.upper() and len(reply) < 15:
@@ -185,5 +189,5 @@ def handle_message(message):
 
 if __name__ == "__main__":
     get_bot_username()
-    print("Запускаю прослушку сообщений...", flush=True)
+    print("Запускаю прослушку...", flush=True)
     bot.infinity_polling(timeout=10, long_polling_timeout=5)
