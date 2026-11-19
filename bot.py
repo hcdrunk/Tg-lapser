@@ -5,9 +5,9 @@ import telebot
 from gigachat import GigaChat
 from gigachat.models import Chat, Messages, MessagesRole
 
-# Подхватываем токен под любым именем, которое использует хостинг
-TG_TOKEN = os.environ.get("цу") or os.environ.get("BOT_TOKEN")
-GIGA_KEY = os.environ.get("цу")
+# Подхватываем ключи из настроек Bothost (сюда ничего вписывать не нужно)
+TG_TOKEN = os.environ.get("TELEGRAM_TOKEN") or os.environ.get("BOT_TOKEN")
+GIGA_KEY = os.environ.get("GIGACHAT_KEY")
 
 print(f"Старт бота... Токен найден: {bool(TG_TOKEN)}, Ключ GigaChat найден: {bool(GIGA_KEY)}", flush=True)
 
