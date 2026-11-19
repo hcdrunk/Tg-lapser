@@ -1,11 +1,12 @@
 import os
+import re
 import random
 from collections import deque
 import telebot
 from gigachat import GigaChat
 from gigachat.models import Chat, Messages, MessagesRole
 
-# Подхватываем ключи из настроек Bothost (сюда ничего вписывать не нужно)
+# Подхватываем ключи из настроек Bothost
 TG_TOKEN = os.environ.get("TELEGRAM_TOKEN") or os.environ.get("BOT_TOKEN")
 GIGA_KEY = os.environ.get("GIGACHAT_KEY")
 
@@ -31,20 +32,38 @@ OFTEN_CHANCE = 0.40  # 40% вероятность ответа
 RANDOM_CHANCE = 0.05  # 5% (примерно каждое 20-е сообщение)
 
 # --- ХАРАКТЕР БОТА (СИСТЕМНЫЙ ПРОМПТ) ---
+# (Формулируем без мата в инструкции, чтобы не триггерить цензуру Сбера)
 SYSTEM_PROMPT = (
     "Ты — Безумный Таймлапсер, бывалый участник телеграм-чата охотников за северными сияниями (Ленобласть, Карелия, Волоярви, Порьюс). "
     "Ты обожаешь снимать северные сияния, делать таймлапсы, шаришь за солнечный ветер, Bz и засвеченные фонари. "
-    "Твой стиль: постироничный, саркастичный, слегка циничный, но свой в доску кореш. Ты любишь мягко подъебывать чатерсов за их нытье, "
+    "Твой стиль: постироничный, саркастичный, слегка циничный, но свой в доску кореш. Ты любишь мягко подкалывать и троллить участников чата за их нытье, "
     "ожидание чуда при плюсовом Bz, поездки в глухие тучи или глупые вопросы. Можешь слегка коверкать слова, использовать сленг охотников и постиронию. "
     "Не душни, не читай лекции и не пиши длинные простыни — отвечай коротко (1-2 емких предложения), как в живом чате. "
-    "Без мата и жестких оскорблений (соблюдай рамки приличия), но с перчинкой, чтобы было смешно. "
-    "ВАНО: Тебе передают последние сообщения из чата для контекста. Тебе нужно ответить именно на ПОСЛЕДНЕЕ сообщение от указанного юзера. "
+    "Отвечай с юмором и перчинкой, чтобы было смешно. "
+    "ВАЖНО: Тебе передают последние сообщения из чата для контекста. Тебе нужно ответить именно на ПОСЛЕДНЕЕ сообщение от указанного юзера. "
     "Если последнее сообщение слишком короткое, бессмысленное или там вообще не за что зацепиться для шутки — ответь ОДНИМ словом: ПРОПУСК"
 )
 # ----------------------------------------
 
 chat_histories = {}
 BOT_USERNAME = None
+
+# Смягчаем мат перед отправкой в Сбер, чтобы не срабатывала цензура
+def clean_for_sber(text):
+    bad_patterns = [
+        r'\b[хx][уy][йяеёию]\w*',
+        r'\b[пp][иi][зz][дd]\w*',
+        r'\b[еeё][бb]\w*',
+        r'\b[бb][лl][яa]\w*',
+        r'\b[сc][уy][кk]\w*',
+        r'\b[мm][уy][дd][аa]\w*',
+        r'\b[гg][оo][вv][нn]\w*',
+        r'\b[жj][оo][пp]\w*'
+    ]
+    cleaned = text
+    for pat in bad_patterns:
+        cleaned = re.sub(pat, '[эмоции]', cleaned, flags=re.IGNORECASE)
+    return cleaned
 
 def get_bot_username():
     global BOT_USERNAME
@@ -70,7 +89,8 @@ def handle_message(message):
         chat_histories[chat_id] = deque(maxlen=12)
 
     if not text.startswith('/'):
-        chat_histories[chat_id].append(f"{user_name}: {text}")
+        # В историю сохраняем уже смягченный текст, чтобы старый мат не ломал будущие запросы
+        chat_histories[chat_id].append(f"{user_name}: {clean_for_sber(text)}")
 
     bot_user = get_bot_username()
     if text.startswith('/'):
@@ -102,17 +122,18 @@ def handle_message(message):
     print("Триггер сработал! Отправляю запрос в GigaChat...", flush=True)
 
     history_text = "\n".join(chat_histories[chat_id])
+    safe_last_text = clean_for_sber(text)
+
     prompt_for_ai = (
         f"Вот последние сообщения в чате для понимания контекста:\n"
         f"{history_text}\n\n"
-        f"Напиши саркастичный ответ от лица Безумного Таймлапсера на ПОСЛЕДНЕЕ сообщение от {user_name}: «{text}»"
+        f"Напиши саркастичный ответ от лица Безумного Таймлапсера на ПОСЛЕДНЕЕ сообщение от {user_name}: «{safe_last_text}»"
     )
 
     try:
         with GigaChat(credentials=GIGA_KEY, verify_ssl_certs=False) as giga:
             models_list = giga.get_models()
-            available_model = models_list.data[0].id_
-            print(f"Использую модель Сбера: {available_model}", flush=True)
+            available_model = models_list.data.id_
 
             payload = Chat(
                 model=available_model,
@@ -124,8 +145,20 @@ def handle_message(message):
                 max_tokens=160
             )
             response = giga.chat(payload)
-            reply = response.choices[0].message.content.strip()
+            reply = response.choices.message.content.strip()
             print(f"Ответ GigaChat: {reply}", flush=True)
+
+            # Блокируем душные системные отписки Сбера, если цензура всё-таки сработала
+            censorship_phrases = [
+                "генеративные языковые модели",
+                "не обладают собственным мнением",
+                "чувствительные темы могут быть ограничены",
+                "я не могу обсуждать",
+                "как искусственный интеллект"
+            ]
+            if any(phrase in reply.lower() for phrase in censorship_phrases):
+                print("Сработала цензура Сбера — сообщение отброшено.", flush=True)
+                return
 
             if "ПРОПУСК" in reply.upper() and len(reply) < 15:
                 return
