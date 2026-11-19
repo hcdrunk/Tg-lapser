@@ -1,15 +1,15 @@
 import os
 import random
-import threading
 from collections import deque
-from flask import Flask
 import telebot
 from gigachat import GigaChat
 from gigachat.models import Chat, Messages, MessagesRole
 
-# Берем ключи из настроек сервера
-TG_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-GIGA_KEY = os.environ.get("GIGACHAT_KEY")
+# Подхватываем токен под любым именем, которое использует хостинг
+TG_TOKEN = os.environ.get("9078400838:AAEkskk3gv2Usllfl3w567pulYqQ11BRDGY") or os.environ.get("BOT_TOKEN")
+GIGA_KEY = os.environ.get("MDFhMWY1MTAtN2I4My03NjU0LTgwZTctM2U1OGU0ZTE1YWI5OjNjNDJkNWJjLTBmZTAtNDg5Zi1iYmI0LTgxMjA0NThmZDkwMw==")
+
+print(f"Старт бота... Токен найден: {bool(TG_TOKEN)}, Ключ GigaChat найден: {bool(GIGA_KEY)}", flush=True)
 
 bot = telebot.TeleBot(TG_TOKEN)
 
@@ -25,10 +25,10 @@ OFTEN_TRIGGERS = [
     "bz", "ветер", "плотность", "скорость", "тучи", "облачность", 
     "дуга", "дыра", "пыхнуло", "не посияет"
 ]
-OFTEN_CHANCE = 0.40  # 0.40 = 40% вероятность ответа
+OFTEN_CHANCE = 0.40  # 40% вероятность ответа
 
 # 3. Вероятность случайного врыва в обычный разговор без триггеров
-RANDOM_CHANCE = 0.05  # 0.05 = 5% (примерно каждое 20-е сообщение)
+RANDOM_CHANCE = 0.05  # 5% (примерно каждое 20-е сообщение)
 
 # --- ХАРАКТЕР БОТА (СИСТЕМНЫЙ ПРОМПТ) ---
 SYSTEM_PROMPT = (
@@ -43,30 +43,19 @@ SYSTEM_PROMPT = (
 )
 # ----------------------------------------
 
-# Память чата: хранит последние 12 сообщений для каждого чата отдельно
 chat_histories = {}
 BOT_USERNAME = None
 
 def get_bot_username():
     global BOT_USERNAME
     if not BOT_USERNAME:
-        BOT_USERNAME = bot.get_me().username.lower()
+        me = bot.get_me()
+        BOT_USERNAME = me.username.lower()
+        print(f"Бот успешно авторизован в Telegram как @{BOT_USERNAME}", flush=True)
     return BOT_USERNAME
-
-# Мини-сервер для Render, чтобы бот не засыпал
-app = Flask(__name__)
-
-@app.route('/')
-def home():
-    return "Безумный Таймлапсер на посту!"
-
-def run_web():
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port)
 
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
-    # Игнорируем сообщения без текста (стикеры, просто фото без подписи)
     if not message.text:
         return
 
@@ -75,22 +64,20 @@ def handle_message(message):
     chat_id = message.chat.id
     user_name = message.from_user.first_name or "Чатерс"
 
-    # Создаем историю для нового чата, если ее еще нет
+    print(f"[Чат {chat_id}] {user_name}: {text}", flush=True)
+
     if chat_id not in chat_histories:
         chat_histories[chat_id] = deque(maxlen=12)
 
-    # Сохраняем сообщение в память контекста (если это не команда другому боту)
     if not text.startswith('/'):
         chat_histories[chat_id].append(f"{user_name}: {text}")
 
-    # Игнорируем команды через слэш и вызовы чужих ботов (где есть @, но не тегают нашего бота)
     bot_user = get_bot_username()
     if text.startswith('/'):
         return
     if '@' in text_lower and f"@{bot_user}" not in text_lower:
         return
 
-    # Проверяем, ответили ли реплаем нашему боту или тегнули его
     is_reply_to_bot = (
         message.reply_to_message is not None and 
         message.reply_to_message.from_user.username and 
@@ -98,7 +85,6 @@ def handle_message(message):
     )
     is_mentioned = f"@{bot_user}" in text_lower or "таймлапсер" in text_lower
 
-    # Определяем, должен ли бот ответить сейчас
     should_reply = False
 
     if is_reply_to_bot or is_mentioned or any(word in text_lower for word in ALWAYS_TRIGGERS):
@@ -107,14 +93,14 @@ def handle_message(message):
         if random.random() < OFTEN_CHANCE:
             should_reply = True
     else:
-        # Для рандомного врыва пропускаем совсем короткие сообщения (меньше 12 символов)
         if len(text) >= 12 and random.random() < RANDOM_CHANCE:
             should_reply = True
 
     if not should_reply:
         return
 
-    # Собираем контекст переписки
+    print(f"Триггер сработал! Отправляю запрос в GigaChat...", flush=True)
+
     history_text = "\n".join(chat_histories[chat_id])
     prompt_for_ai = (
         f"Вот последние сообщения в чате для понимания контекста:\n"
@@ -134,18 +120,18 @@ def handle_message(message):
             )
             response = giga.chat(payload)
             reply = response.choices.message.content.strip()
+            print(f"Ответ GigaChat: {reply}", flush=True)
 
-            # Если нейросеть решила, что шутить не над чем — молчим
             if "ПРОПУСК" in reply.upper() and len(reply) < 15:
                 return
 
-            # Сохраняем свой ответ в память чата и отправляем в Telegram
             chat_histories[chat_id].append(f"Безумный Таймлапсер: {reply}")
             bot.reply_to(message, reply)
 
     except Exception as e:
-        print(f"Ошибка GigaChat: {e}")
+        print(f"ОШИБКА GigaChat: {e}", flush=True)
 
 if __name__ == "__main__":
-    threading.Thread(target=run_web, daemon=True).start()
+    get_bot_username()
+    print("Запускаю прослушку сообщений...", flush=True)
     bot.infinity_polling(timeout=10, long_polling_timeout=5)
