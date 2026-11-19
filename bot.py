@@ -99,7 +99,7 @@ def handle_message(message):
     if not should_reply:
         return
 
-    print(f"Триггер сработал! Отправляю запрос в GigaChat...", flush=True)
+    print("Триггер сработал! Отправляю запрос в GigaChat...", flush=True)
 
     history_text = "\n".join(chat_histories[chat_id])
     prompt_for_ai = (
@@ -110,7 +110,12 @@ def handle_message(message):
 
     try:
         with GigaChat(credentials=GIGA_KEY, verify_ssl_certs=False) as giga:
+            models_list = giga.get_models()
+            available_model = models_list.data[0].id
+            print(f"Использую модель Сбера: {available_model}", flush=True)
+
             payload = Chat(
+                model=available_model,
                 messages=[
                     Messages(role=MessagesRole.SYSTEM, content=SYSTEM_PROMPT),
                     Messages(role=MessagesRole.USER, content=prompt_for_ai)
@@ -119,7 +124,7 @@ def handle_message(message):
                 max_tokens=160
             )
             response = giga.chat(payload)
-            reply = response.choices.message.content.strip()
+            reply = response.choices[0].message.content.strip()
             print(f"Ответ GigaChat: {reply}", flush=True)
 
             if "ПРОПУСК" in reply.upper() and len(reply) < 15:
