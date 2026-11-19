@@ -30,28 +30,23 @@ OFTEN_CHANCE = 0.40  # 40% вероятность ответа
 # 3. Вероятность случайного врыва в обычный разговор без триггеров
 RANDOM_CHANCE = 0.05  # 5% (примерно каждое 20-е сообщение)
 
-# --- ХАРАКТЕР БОТА (СИСТЕМНЫЙ ПРОМПТ С ПРИМЕРАМИ) ---
+# --- ОБЕЗЛИЧЕННЫЙ ОЧЕЛОВЕЧЕННЫЙ ПРОМПТ ---
 SYSTEM_PROMPT = (
-    "Ты — Безумный Таймлапсер, опытный и циничный участник телеграм-чата охотников за северными сияниями (Питер, Ленобласть, Волоярви, Порьюс). "
-    "Ты сам постоянно снимаешь таймлапсы, мерзнешь в полях и шаришь за солнечный ветер, Bz, плотность и засветку. "
-    "Твой стиль: постироничный, саркастичный, слегка циничный, но свой в доску кореш. Ты любишь мягко подкалывать участников чата за их нытье, "
-    "ожидание чуда при плюсовом Bz, поездки в глухие тучи или глупые вопросы. Можешь слегка коверкать слова, использовать сленг охотников и постиронию. "
-    "Не душни, не читай лекции и не пиши длинные простыни — отвечай коротко (1-2 предложения), как в живом чате. "
-    "Пиши как обычный живой чувак из интернета: без восклицательных знаков в конце каждой фразы, без штампов типа 'братишка', 'супер-дупер' и без душных советов.\n\n"
-    "Примеры твоего стиля общения:\n"
-    "- Юзер: 'посияет сегодня интересно?'\n"
-    "  Ты: 'Посияет, конечно. Особенно красиво будут сиять фонари на Мурманке сквозь плотную облачность.'\n"
-    "- Юзер: 'еду в Волоярви, вроде просвет обещают'\n"
-    "  Ты: 'Сфоткай там серые тучи на длинной выдержке, давно таких шедевров в чате не было.'\n"
-    "- Юзер: 'bz в плюс ушел, расходимся'\n"
-    "  Ты: 'Классика, только я штатив разложил и термос открыл — солнце сразу спать легло.'\n\n"
-    "ВАЖНО: Тебе передают последние сообщения из чата для контекста. Ответь конкретно на ПОСЛЕДНЕЕ сообщение от указанного юзера. "
-    "Если в сообщении вообще не за что зацепиться для шутки — ответь ОДНИМ словом: ПРОПУСК"
+    "Ты — обычный живой парень из дружеского питерского телеграм-чата. "
+    "В этом чате сидят ребята, которые иногда охотятся за северными сияниями, но в основном просто треплются за жизнь, работу, дорогу, погоду и всякую фигню. "
+    "Твой характер: острый на язык, саркастичный, постироничный кореш, который любит вовремя подколоть собеседника по сути его слов.\n\n"
+    "ГЛАВНЫЕ ПРАВИЛА (ОБЯЗАТЕЛЬНО):\n"
+    "1. Отвечай СТРОГО по контексту разговора. Цепляйся за конкретные слова, несостыковки или нытье в сообщении человека.\n"
+    "2. КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО приплетать северные сияния, таймлапсы, штативы, выдержку, Bz и фототехнику, если люди в последних сообщениях сами об этом не говорили! Не веди себя как робот-фотограф.\n"
+    "3. Пиши коротко (1, максимум 2 предложения), как пишут в мессенджерах с телефона: с маленькой буквы, без лишних знаков препинания и без восклицательных знаков.\n"
+    "4. Никаких нейросетевых штампов, морализаторства и душных советов.\n"
+    "5. Если последнее сообщение в чате — это просто 'ок', 'понял', 'хаха' или там реально не над чем пошутить — ответь ОДНИМ словом: ПРОПУСК"
 )
-# -----------------------------------------------------
+# ----------------------------------------
 
 chat_histories = {}
 BOT_USERNAME = None
+BOT_FIRST_NAME = None
 BEST_MODEL = None
 
 def clean_for_sber(text):
@@ -70,13 +65,13 @@ def clean_for_sber(text):
         cleaned = re.sub(pat, '[эмоции]', cleaned, flags=re.IGNORECASE)
     return cleaned
 
-def get_bot_username():
-    global BOT_USERNAME
+def init_bot_info():
+    global BOT_USERNAME, BOT_FIRST_NAME
     if not BOT_USERNAME:
         me = bot.get_me()
         BOT_USERNAME = me.username.lower()
-        print(f"Авторизован как @{BOT_USERNAME}", flush=True)
-    return BOT_USERNAME
+        BOT_FIRST_NAME = me.first_name or "Бот"
+        print(f"Авторизован как {BOT_FIRST_NAME} (@{BOT_USERNAME})", flush=True)
 
 def pick_smartest_model(giga):
     global BEST_MODEL
@@ -100,6 +95,7 @@ def handle_message(message):
     if not message.text:
         return
 
+    init_bot_info()
     text = message.text.strip()
     text_lower = text.lower()
     chat_id = message.chat.id
@@ -108,23 +104,23 @@ def handle_message(message):
     print(f"[Чат {chat_id}] {user_name}: {text}", flush=True)
 
     if chat_id not in chat_histories:
-        chat_histories[chat_id] = deque(maxlen=12)
+        chat_histories[chat_id] = deque(maxlen=20)
 
     if not text.startswith('/'):
         chat_histories[chat_id].append(f"{user_name}: {clean_for_sber(text)}")
 
-    bot_user = get_bot_username()
     if text.startswith('/'):
         return
-    if '@' in text_lower and f"@{bot_user}" not in text_lower:
+    if '@' in text_lower and f"@{BOT_USERNAME}" not in text_lower:
         return
 
     is_reply_to_bot = (
         message.reply_to_message is not None and 
         message.reply_to_message.from_user.username and 
-        message.reply_to_message.from_user.username.lower() == bot_user
+        message.reply_to_message.from_user.username.lower() == BOT_USERNAME
     )
-    is_mentioned = f"@{bot_user}" in text_lower or "таймлапсер" in text_lower
+    # Реагирует на тег @юзернейм или на актуальное имя бота из профиля Telegram
+    is_mentioned = f"@{BOT_USERNAME}" in text_lower or BOT_FIRST_NAME.lower() in text_lower
 
     should_reply = False
 
@@ -144,9 +140,9 @@ def handle_message(message):
     safe_last_text = clean_for_sber(text)
 
     prompt_for_ai = (
-        f"Последние сообщения в чате:\n"
+        f"Вот переписка в чате (последние сообщения):\n"
         f"{history_text}\n\n"
-        f"Ответь в своем стиле на ПОСЛЕДНЕЕ сообщение от {user_name}: «{safe_last_text}»"
+        f"Вклинься в разговор и остроумно подколи {user_name} в ответ на его последнюю фразу: «{safe_last_text}»"
     )
 
     try:
@@ -160,8 +156,8 @@ def handle_message(message):
                     Messages(role=MessagesRole.SYSTEM, content=SYSTEM_PROMPT),
                     Messages(role=MessagesRole.USER, content=prompt_for_ai)
                 ],
-                temperature=0.65,
-                max_tokens=140
+                temperature=0.72,
+                max_tokens=120
             )
             response = giga.chat(payload)
             reply = response.choices[0].message.content.strip()
@@ -181,13 +177,13 @@ def handle_message(message):
             if "ПРОПУСК" in reply.upper() and len(reply) < 15:
                 return
 
-            chat_histories[chat_id].append(f"Безумный Таймлапсер: {reply}")
+            chat_histories[chat_id].append(f"{BOT_FIRST_NAME}: {reply}")
             bot.reply_to(message, reply)
 
     except Exception as e:
         print(f"ОШИБКА GigaChat: {e}", flush=True)
 
 if __name__ == "__main__":
-    get_bot_username()
+    init_bot_info()
     print("Запускаю прослушку...", flush=True)
     bot.infinity_polling(timeout=10, long_polling_timeout=5)
