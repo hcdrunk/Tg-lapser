@@ -109,7 +109,7 @@ def handle_message(message):
     )
 
     try:
-        with GigaChat(credentials=GIGA_KEY, verify_ssl_certs=False, model="GigaChat-2-Max") as giga:
+        with GigaChat(credentials=GIGA_KEY, verify_ssl_certs=False) as giga:
             payload = Chat(
                 messages=[
                     Messages(role=MessagesRole.SYSTEM, content=SYSTEM_PROMPT),
