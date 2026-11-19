@@ -1,3 +1,2 @@
 pyTelegramBotAPI
 gigachat
-flask
