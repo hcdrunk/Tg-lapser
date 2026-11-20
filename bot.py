@@ -92,7 +92,7 @@ def generate_and_send_image(giga, model_name, draw_prompt, chat_id, reply_msg_id
     print(f"Генерирую картинку: {draw_prompt}", flush=True)
     bot.send_chat_action(chat_id, 'upload_photo')
     payload = Chat(
-        model="GigaChat",
+        model="GigaChat-2",
         messages=[
             Messages(
                 role=MessagesRole.SYSTEM,
