@@ -88,7 +88,7 @@ def pick_smartest_model(giga):
                 return BEST_MODEL
     BEST_MODEL = models[0]
     return BEST_MODEL
-    def generate_and_send_image(giga, model_name, draw_prompt, chat_id, reply_msg_id):
+def generate_and_send_image(giga, model_name, draw_prompt, chat_id, reply_msg_id):
     print(f"Генерирую картинку: {draw_prompt}", flush=True)
     bot.send_chat_action(chat_id, 'upload_photo')
     payload = Chat(
@@ -236,4 +236,3 @@ if __name__ == "__main__":
     init_bot_info()
     print("Запускаю прослушку...", flush=True)
     bot.infinity_polling(timeout=10, long_polling_timeout=5)
-
