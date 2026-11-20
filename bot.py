@@ -92,7 +92,7 @@ def pick_smartest_model(giga):
     print(f"Генерирую картинку: {draw_prompt}", flush=True)
     bot.send_chat_action(chat_id, 'upload_photo')
     payload = Chat(
-        model=model_name,
+        model="GigaChat",
         messages=[
             Messages(
                 role=MessagesRole.SYSTEM,
